@@ -19,7 +19,7 @@ from commerce_common.types import MemoryFact
 
 from .config import ShoppingAgentConfig
 from .fencing import STOREFRONT_FENCE
-from .types import Cart, PageContext, UserPreferences
+from .types import Cart, CustomerSummary, PageContext, UserPreferences
 
 
 def build_static_system(config: ShoppingAgentConfig, skills: SkillRegistry) -> str:
@@ -142,15 +142,41 @@ def build_static_system(config: ShoppingAgentConfig, skills: SkillRegistry) -> s
         else ""
     )
 
-    return f"""You are {config.assistant_name} for {config.brand_name}, talking with a customer inside the store's app or website while they shop. Answer with short text plus the components your presentation tools render. Your voice is {config.brand_voice}.
+    acting = config.enable_acting_customer
+    audience = (
+        f"a member of {config.brand_name}'s staff inside the store's app or website, while "
+        "they serve one of the store's customers"
+        if acting
+        else "a customer inside the store's app or website while they shop"
+    )
+    acting_rule = (
+        "\n- The person you are talking with is staff acting for one customer at a time, the "
+        "one select_customer last selected (acting_customer in the Session context block). "
+        'In these instructions "the customer" means that customer, and the staff member\'s '
+        "requests stand in for theirs. Find a customer with find_customers and select one "
+        "from its results before any cart, checkout, order, or account work. Never act for or "
+        "describe the account of any customer but the selected one; when the staff member "
+        "turns to another customer, find and select them first."
+        if acting
+        else ""
+    )
+    account_rule = (
+        "\n- State a balance, a due date, or a payment term only from a get_account_status "
+        "result in this conversation, as given: do not add, convert, or project the figures, "
+        "and when the result is unavailable say so without giving a number."
+        if config.enable_account_status
+        else ""
+    )
+
+    return f"""You are {config.assistant_name} for {config.brand_name}, talking with {audience}. Answer with short text plus the components your presentation tools render. Your voice is {config.brand_voice}.
 
 # How you work
-
+{acting_rule}
 - Work out what the customer is trying to get done and act on it; a vague request usually has enough to go on. Ask at most one clarifying question per request (a research intake may bundle two or three in one message), and only when acting without the answer would probably waste their time.{write_rules}
 - A go-ahead in reply to your clarifying question means your default stands; do not ask again.{plan_edit_rule}
 - Keep an even tone on turns that add, stage, or confirm: no exclamation marks and no emoji. Keep your mechanics out of the reply: the customer sees the outcome of a retry and hears about a catalog gap as a fact about what the store carries.
 - Ground every factual statement in a tool result from this conversation: products, specs, availability, store terms, and order details alike. Search before you describe what is available, pass tools only product_id values a tool returned, and report a spec under the label the record gives it. When something is unavailable or unknown, say so; do not point the customer to other named retailers.
-- In your text and in every component field, name only neighborhoods, landmarks, and public spaces. Do not name a real business, venue, or brand outside this catalog; describe the kind of place instead.{terms_rules}
+- In your text and in every component field, name only neighborhoods, landmarks, and public spaces. Do not name a real business, venue, or brand outside this catalog; describe the kind of place instead.{terms_rules}{account_rule}
 - Say only what happened. Confirm {confirmed_writes}. A personal fact that is not in the Session context block or a recall result is not remembered: say you do not have it. When you run out of room, say which parts are done and which are not.
 - Keep your prose to a sentence or two. Open with the component when an opening line would only announce it; a question for the customer, a catalog gap, or a stand-in you are naming goes in one sentence before the call, and no text follows the turn's last component.
 - Do not repeat in text what a component shows. Your pick goes in the component's reason or recommendation field, and figures going into a breakdown, comparison, or terms box do not also appear as a table or list in your text.
@@ -204,10 +230,12 @@ def build_dynamic_context(
     max_chars: int = 6000,
     account: dict[str, Any] | None = None,
     account_max_chars: int = 2000,
+    acting_customer: CustomerSummary | None = None,
 ) -> str:
     """The per-request half, appended after the cache breakpoint and wrapped in the data
     fence. ``account`` (StorefrontBackend.get_account_context) has its own size cap so a
-    verbose backend cannot crowd out the rest of the block."""
+    verbose backend cannot crowd out the rest of the block. ``acting_customer`` is the
+    customer a staff user selected (``ShoppingSessionState.acting_customer``)."""
 
     payload: dict[str, Any] = {}
     if preferences is not None:
@@ -217,6 +245,8 @@ def build_dynamic_context(
             "location": preferences.default_location,
             "preferences": preferences.preferences,
         }
+    if acting_customer is not None:
+        payload["acting_customer"] = acting_customer.model_dump(exclude_none=True)
     if account is not None:
         if len(json.dumps(account, ensure_ascii=False, default=str)) > account_max_chars:
             payload["account"] = {"note": "account context omitted (too large)"}

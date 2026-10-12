@@ -14,7 +14,17 @@ from typing import Any
 from commerce_common.fencing import MAX_FENCED_CHARS
 
 from .fencing import STOREFRONT_FENCE
-from .types import Cart, CartItem, FulfillmentOption, Order, Policy, Product, ProductDetails
+from .types import (
+    AccountStatus,
+    Cart,
+    CartItem,
+    CustomerSummary,
+    FulfillmentOption,
+    Order,
+    Policy,
+    Product,
+    ProductDetails,
+)
 
 
 def compact_product(product: Product) -> dict[str, Any]:
@@ -139,6 +149,18 @@ def orders_payload(orders: Sequence[Order]) -> Any:
 def policies_payload(policies: Sequence[Policy]) -> Any:
     return [p.model_dump(exclude_none=True) for p in policies] or {
         "note": "No matching policy content."
+    }
+
+
+def account_status_payload(statuses: Sequence[AccountStatus]) -> Any:
+    return [s.model_dump(exclude_none=True) for s in statuses] or {
+        "note": "No account found for this customer."
+    }
+
+
+def customers_payload(customers: Sequence[CustomerSummary]) -> Any:
+    return [c.model_dump(exclude_none=True) for c in customers] or {
+        "note": "No customer matched this search."
     }
 
 

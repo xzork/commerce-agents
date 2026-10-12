@@ -13,8 +13,10 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from .types import (
+    AccountStatus,
     Cart,
     CheckoutHandoff,
+    CustomerSummary,
     Disclosure,
     FulfillmentOption,
     Order,
@@ -132,6 +134,32 @@ class StorefrontBackend(ABC):
         dynamic context block, or None when the deployment has no account model. It is
         sent on every request, so keep it small; the default returns None."""
         return None
+
+    # -- Account status and acting customer (optional) ----------------------------
+
+    async def get_account_status(self, session: ShoppingSessionContext) -> list[AccountStatus]:
+        """Optional: the balance and payment terms of each account the session's customer
+        holds, or of the acting customer's accounts for a staff user; an empty list when
+        there are none. The tool exists only under
+        ``ShoppingAgentConfig.enable_account_status``. Read live on each call, never
+        cached into the context block; a failure reaches the model as the tool being
+        unavailable, with no figures."""
+        raise NotImplementedError("get_account_status is not implemented by this backend")
+
+    async def find_customers(
+        self, session: ShoppingSessionContext, query: str, limit: int = 8
+    ) -> list[CustomerSummary]:
+        """Optional: the customers matching ``query`` (a name, a city, part of a tax
+        number) that the staff user in ``session`` may act for, best first, at most
+        ``limit``. The tool exists only under ``enable_acting_customer``."""
+        raise NotImplementedError("find_customers is not implemented by this backend")
+
+    async def select_customer(self, session: ShoppingSessionContext, customer_id: str) -> None:
+        """Optional: record that the staff user now acts for ``customer_id``, an id
+        :meth:`find_customers` returned this session (the executor checks that first).
+        Every customer-scoped method after this acts for that customer, and the host's
+        authorization keys on what this records, not on the model's word."""
+        raise NotImplementedError("select_customer is not implemented by this backend")
 
     # -- Orders and policies ------------------------------------------------------
 

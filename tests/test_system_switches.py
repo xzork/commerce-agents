@@ -191,6 +191,18 @@ def test_sdk_toolsets_register_what_the_registry_carries():
     MerchantToolset(backend=merchant_mcp_server._default_backend(no_pricing), config=no_pricing)
 
 
+async def test_opt_in_shopping_systems_reach_the_sdk_and_mcp_paths():
+    opt_in = {"get_account_status", "find_customers", "select_customer"}
+    assert not opt_in & set(shopping_sdk_tool_names(shopping()))
+    on = shopping(enable_account_status=True, enable_acting_customer=True)
+    assert opt_in <= set(shopping_sdk_tool_names(on))
+
+    store = storefront_mcp_server.build_server(memory_store=InMemoryMemoryStore(), config=on)
+    async with create_connected_server_and_client_session(store) as client:
+        listed = {tool.name for tool in (await client.list_tools()).tools}
+    assert opt_in <= listed
+
+
 async def test_mcp_servers_leave_switched_off_tools_unregistered():
     store = storefront_mcp_server.build_server(
         memory_store=InMemoryMemoryStore(), config=shopping(enable_cart=False, enable_orders=False)

@@ -43,7 +43,7 @@ A rule the core journey needs on most conversations moves a layer down. This tab
 A deployment implements one abstract class per role; nothing else reaches its systems.
 
 - `StorefrontBackend` (`shopping_agent/backend.py`): 11 abstract methods, catalog (2), cart (4), preferences (1),
-  orders (2), policies (1), fulfillment (1); `get_account_context`, `get_disclosure`, and `checkout_handoff` have defaults. No method
+  orders (2), policies (1), fulfillment (1); `get_account_context`, `get_disclosure`, and `checkout_handoff` have defaults, and the opt-in `get_account_status`, `find_customers`, and `select_customer` raise `NotImplementedError` until implemented. No method
   places an order or moves money; `checkout_handoff` names where payment happens (a hosted checkout URL, or one per seller) and the host renders it.
 - `MerchantBackend` (`merchant_agent/backend.py`): 16 abstract methods, reads (8: performance 3, catalog 2,
   inventory and order health 2, pricing 1) and the change lifecycle (8: five `stage_*`, `get_pending_changes`,

@@ -10,9 +10,11 @@ from .backend import NotOffered, StorefrontBackend, Unavailable
 from .config import ShoppingAgentConfig
 from .serialization import cart_payload, compact_product, search_result_text
 from .types import (
+    AccountStatus,
     Cart,
     CartItem,
     CheckoutHandoff,
+    CustomerSummary,
     Disclosure,
     DisclosureRow,
     FulfillmentOption,
@@ -30,9 +32,11 @@ from .types import (
 )
 
 __all__ = [
+    "AccountStatus",
     "Cart",
     "CheckoutHandoff",
     "CartItem",
+    "CustomerSummary",
     "Disclosure",
     "DisclosureRow",
     "FulfillmentOption",

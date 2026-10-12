@@ -151,6 +151,19 @@ def build_server(
     async def recall_memories(topic: str, ctx: Context) -> str:
         return await executors.call(ctx, "recall_memories", {"topic": topic})
 
+    # Registered only when the config switches their systems on (see registrar).
+    @register("find_customers")
+    async def find_customers(query: str, ctx: Context, limit: int = 8) -> str:
+        return await executors.call(ctx, "find_customers", {"query": query, "limit": limit})
+
+    @register("select_customer")
+    async def select_customer(customer_id: str, ctx: Context) -> str:
+        return await executors.call(ctx, "select_customer", {"customer_id": customer_id})
+
+    @register("get_account_status")
+    async def get_account_status(ctx: Context) -> str:
+        return await executors.call(ctx, "get_account_status", {})
+
     @register("get_orders")
     async def get_orders(ctx: Context, limit: int = 5) -> str:
         return await executors.call(ctx, "get_orders", {"limit": limit})

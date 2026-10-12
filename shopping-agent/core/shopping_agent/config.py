@@ -34,6 +34,14 @@ class ShoppingAgentConfig(BaseAgentConfig):
     enable_policies: bool = True
     enable_fulfillment: bool = True
 
+    # -- Systems off unless switched on. `enable_account_status` registers
+    # get_account_status over StorefrontBackend.get_account_status. `enable_acting_customer`
+    # is for a staff user serving customers: it registers find_customers and
+    # select_customer, frames the prompt for staff, and holds the cart, checkout, order,
+    # and account tools until a customer is selected.
+    enable_account_status: bool = False
+    enable_acting_customer: bool = False
+
     # -- Cart caps, enforced by the gates on every path.
     max_quantity_per_item: int = Field(default=24, ge=1)
     max_cart_lines: int = Field(default=100, ge=1)
@@ -115,6 +123,26 @@ class ShoppingAgentConfig(BaseAgentConfig):
         "hasn't",
         "delayed",
     )
+    account_grounding_gate: bool = True
+    account_intent_terms: tuple[str, ...] = (
+        "balance",
+        "statement",
+        "owe",
+        "owed",
+        "outstanding",
+        "due date",
+        "payment terms",
+        "credit",
+    )
+    account_intent_cues: tuple[str, ...] = (
+        "?",
+        "how much",
+        "what",
+        "when",
+        "show",
+        "check",
+        "tell me",
+    )
     catalog_grounding_gate: bool = True
     product_id_patterns: tuple[str, ...] = (
         r"\b[A-Z]{2,4}-\d{3,4}\b",
@@ -132,4 +160,8 @@ class ShoppingAgentConfig(BaseAgentConfig):
             names.add("search_policies")
         if not self.enable_fulfillment:
             names.add("get_fulfillment_options")
+        if not self.enable_account_status:
+            names.add("get_account_status")
+        if not self.enable_acting_customer:
+            names |= {"find_customers", "select_customer"}
         return frozenset(names)

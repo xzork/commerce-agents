@@ -140,6 +140,7 @@ class ShoppingAgent:
             now=session.local_now(),
             account=account,
             account_max_chars=self.config.max_context_chars,
+            acting_customer=state.acting_customer,
         )
         system = build_system_blocks(self._static_system, context)
         executor = self.executor_class(

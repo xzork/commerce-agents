@@ -6,6 +6,10 @@ returned this session (or lines already in the cart), holds an add of a product 
 still has options to choose and points at its variants, caps the resulting line
 quantity at the config's limit, and reports any cap it applied; writes for one session
 are serialized because a turn's tool calls run concurrently.
+
+With acting-customer on, the customer gates apply the same discipline to customers:
+``select_customer`` accepts only an id ``find_customers`` returned this session, and
+every customer-scoped tool is held until a customer is selected.
 """
 
 from __future__ import annotations
@@ -24,6 +28,23 @@ from .types import Cart, Order, Product, ShoppingSessionContext, ShoppingSession
 
 PROVENANCE_GATE = "provenance"
 OPTIONS_GATE = "options"
+CUSTOMER_GATE = "customer"
+CUSTOMER_PROVENANCE_GATE = "customer_provenance"
+
+# The tools that act for a customer: with acting-customer on, each waits for a selection.
+CUSTOMER_SCOPED_TOOLS = frozenset(
+    {
+        "get_cart",
+        "add_to_cart",
+        "update_cart_item",
+        "remove_from_cart",
+        "checkout",
+        "get_orders",
+        "get_order_status",
+        "present_order_status",
+        "get_account_status",
+    }
+)
 
 
 def provenance_error(product_id: str) -> str:
@@ -64,6 +85,66 @@ def check_options(state: ShoppingSessionState, product_id: str) -> ToolOutcome |
     if product is None or not product.has_options:
         return None
     return ToolOutcome.held(OPTIONS_GATE, options_error(product))
+
+
+def customer_gate_error(tool_name: str) -> str:
+    return (
+        f"{tool_name} acts for a customer, and no customer is selected yet. Ask the staff "
+        "member which customer this is for, find them with find_customers, then select one "
+        "with select_customer."
+    )
+
+
+def check_acting_customer(
+    config: ShoppingAgentConfig, state: ShoppingSessionState, tool_name: str
+) -> ToolOutcome | None:
+    """The held outcome for a customer-scoped tool called before a customer is selected,
+    when acting-customer is on; else None."""
+    if (
+        not config.enable_acting_customer
+        or tool_name not in CUSTOMER_SCOPED_TOOLS
+        or state.acting_customer_id is not None
+    ):
+        return None
+    return ToolOutcome.held(CUSTOMER_GATE, customer_gate_error(tool_name))
+
+
+def customer_provenance_error(customer_id: str) -> str:
+    return (
+        f"customer_id {customer_id} was not returned by find_customers in this session. "
+        "Search for the customer first, then select a customer_id from those results."
+    )
+
+
+async def gated_select_customer(
+    *,
+    backend: StorefrontBackend,
+    config: ShoppingAgentConfig,
+    session: ShoppingSessionContext,
+    state: ShoppingSessionState,
+    customer_id: str,
+) -> ToolOutcome:
+    """Select the customer a staff user acts for. Switching from another customer
+    empties the cart first, so nothing staged for them carries over."""
+    if customer_id not in state.seen_customers:
+        return ToolOutcome.held(CUSTOMER_PROVENANCE_GATE, customer_provenance_error(customer_id))
+    if customer_id == state.acting_customer_id:
+        return ToolOutcome(f"Already acting for customer {customer_id}.")
+
+    events: list[AgentEvent] = []
+    note = ""
+    async with _cart_lock(session):
+        if state.acting_customer_id is not None and config.enable_cart:
+            cart = await backend.get_cart(session)
+            if cart.items:
+                for item in cart.items:
+                    cart = await backend.remove_from_cart(session, item.product_id)
+                events.append(AgentEvent.cart_update(cart_payload(cart)))
+                note = " The previous customer's cart was emptied."
+        await backend.select_customer(session, customer_id)
+        state.acting_customer_id = customer_id
+    # The confirmation names the id only: the name is backend text and stays in fences.
+    return ToolOutcome(f"Now acting for customer {customer_id}.{note}", events)
 
 
 def remember_order_items(state: ShoppingSessionState, orders: Sequence[Order]) -> None:
