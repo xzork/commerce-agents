@@ -18,6 +18,8 @@ from ..config import ShoppingAgentConfig
 
 _SESSION_PRODUCT_ID = "product_id returned by a tool this session."
 _STATUS_READER = "the customer"
+# With acting-customer on, the person in the conversation is staff serving a customer.
+_STAFF_STATUS_READER = "the staff member"
 
 
 def _product_id(role: str = _SESSION_PRODUCT_ID) -> dict[str, Any]:
@@ -203,6 +205,60 @@ def build_tools(
             "description": (
                 "The customer's profile and saved preferences. Usually already in the "
                 "Session context block; call this only when it is missing there."
+            ),
+            "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+        {
+            "name": "find_customers",
+            "description": (
+                "Find the customers you may act for by name, city, or part of a tax "
+                "number; returns ids with enough detail to tell similar names apart. Call "
+                "it before select_customer, and ask once when two results fit equally."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "maxLength": 100,
+                        "description": "Name, city, or tax number fragment the staff member gave.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10,
+                        "description": "Maximum customers to return.",
+                    },
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "select_customer",
+            "description": (
+                "Act for one customer from then on: the cart, checkout, orders, and account "
+                "status become theirs. Takes only a customer_id find_customers returned this "
+                "session; selecting a different customer empties the cart."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "customer_id": {
+                        "type": "string",
+                        "description": "customer_id returned by find_customers this session.",
+                    },
+                },
+                "required": ["customer_id"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "get_account_status",
+            "description": (
+                "The balance, its due date, and the payment terms of each account the "
+                "customer holds, read live from the store's accounting system. Use for any "
+                "question about what is owed or when it is due."
             ),
             "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
         },
@@ -607,7 +663,8 @@ def build_tools(
     ]
 
     absent = config.absent_tools()
-    tools = [with_status(tool, _STATUS_READER) for tool in tools if tool["name"] not in absent]
+    reader = _STAFF_STATUS_READER if config.enable_acting_customer else _STATUS_READER
+    tools = [with_status(tool, reader) for tool in tools if tool["name"] not in absent]
     tools += [tool for tool in presentation if tool["name"] not in absent]
 
     if config.enable_disclosures:

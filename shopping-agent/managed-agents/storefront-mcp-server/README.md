@@ -26,6 +26,12 @@ hosted agent  ──MCP (streamable HTTP)──►  storefront_mcp_server.py  �
 | `search_policies` | read |
 | `get_fulfillment_options` | read |
 
+The opt-in systems add their tools when the config switches them on:
+`get_account_status` (read) under `enable_account_status`, and `find_customers` (read;
+records customer provenance) and `select_customer` (customer provenance-gated) under
+`enable_acting_customer`, which also holds the cart, order, and account tools until a
+customer is selected.
+
 Presentation tools are custom tools in the manifest, executed by the host application, so
 none are served here; there is no `load_skill`, because the platform loads skills itself.
 

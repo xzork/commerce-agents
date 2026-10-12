@@ -22,14 +22,18 @@ from .config import ShoppingAgentConfig
 from .enrichment import PRESENTATION_COMPONENTS
 from .fencing import STOREFRONT_FENCE
 from .gates import (
+    check_acting_customer,
     gated_add_to_cart,
     gated_remove_from_cart,
+    gated_select_customer,
     gated_update_cart_item,
     remember_order_items,
 )
 from .memory import SHOPPING_MEMORY_EXTRACTION_PROMPT
 from .serialization import (
+    account_status_payload,
     cart_payload,
+    customers_payload,
     fulfillment_payload,
     order_payload,
     orders_payload,
@@ -41,6 +45,7 @@ from .types import SearchFilters, ShoppingSessionContext, ShoppingSessionState
 
 MAX_ORDERS = 20
 MAX_FULFILLMENT_IDS = 20
+MAX_CUSTOMERS = 10
 
 
 def build_memory(
@@ -121,11 +126,24 @@ class ShoppingToolExecutor(BaseToolExecutor):
             "update_cart_item": self._update_cart_item,
             "remove_from_cart": self._remove_from_cart,
             "get_preferences": self._get_preferences,
+            "find_customers": self._find_customers,
+            "select_customer": self._select_customer,
+            "get_account_status": self._get_account_status,
             "get_orders": self._get_orders,
             "get_order_status": self._get_order_status,
             "search_policies": self._search_policies,
             "get_fulfillment_options": self._get_fulfillment_options,
         }
+
+    async def dispatch(self, name: str, tool_input: dict[str, Any]) -> ToolOutcome:
+        """The shared dispatch, after the acting-customer gate: with acting-customer on,
+        a customer-scoped tool, the checkout card included, is held until a customer is
+        selected. A tool the config leaves out still answers as absent."""
+        if name not in self._absent and (
+            held := check_acting_customer(self._config, self._state, name)
+        ):
+            return held
+        return await super().dispatch(name, tool_input)
 
     # -- catalog ---------------------------------------------------------------------
 
@@ -194,7 +212,29 @@ class ShoppingToolExecutor(BaseToolExecutor):
             account = await self._backend.get_account_context(self._session)
             if account is not None:
                 payload["account"] = account
+            if (acting := self._state.acting_customer) is not None:
+                payload["acting_customer"] = acting.model_dump(exclude_none=True)
         return self._fenced(payload)
+
+    async def _find_customers(self, tool_input: dict[str, Any]) -> ToolOutcome:
+        query = self._sanitize(tool_input.get("query", ""), 100)
+        limit = clamp_limit(tool_input.get("limit"), 8, MAX_CUSTOMERS)
+        customers = await self._backend.find_customers(self._session, query, limit)
+        self._state.remember_customers(customers)
+        return self._fenced(customers_payload(customers))
+
+    async def _select_customer(self, tool_input: dict[str, Any]) -> ToolOutcome:
+        return await gated_select_customer(
+            backend=self._backend,
+            config=self._config,
+            session=self._session,
+            state=self._state,
+            customer_id=str(tool_input.get("customer_id", "")),
+        )
+
+    async def _get_account_status(self, _: dict[str, Any]) -> ToolOutcome:
+        statuses = await self._backend.get_account_status(self._session)
+        return self._fenced(account_status_payload(statuses))
 
     async def _get_orders(self, tool_input: dict[str, Any]) -> ToolOutcome:
         limit = clamp_limit(tool_input.get("limit"), 5, MAX_ORDERS)

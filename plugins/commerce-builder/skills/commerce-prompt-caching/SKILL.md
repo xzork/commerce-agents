@@ -65,7 +65,7 @@ The fields marked `(prompt)` in `commerce_common/config.py` and the role configs
 | Config | Fields |
 |---|---|
 | `BaseAgentConfig` (`commerce_common/config.py`) | `brand_name`, `assistant_name`, `brand_voice`, `enable_web_search` |
-| `ShoppingAgentConfig` (`shopping_agent/config.py`) | `domain_search_notes`, `enable_disclosures`, and the system switches `enable_cart`, `enable_orders`, `enable_policies`, `enable_fulfillment` |
+| `ShoppingAgentConfig` (`shopping_agent/config.py`) | `domain_search_notes`, `enable_disclosures`, the system switches `enable_cart`, `enable_orders`, `enable_policies`, `enable_fulfillment`, and the opt-in `enable_account_status` and `enable_acting_customer` |
 | `MerchantAgentConfig` (`merchant_agent/config.py`) | `enable_analysis`, `require_host_approval`, `approval_surface`, `stage_shows_preview`, and the system switches `enable_listing_edits`, `enable_inventory`, `enable_pricing`, `enable_campaigns`; `max_items_per_change` and `max_search_results` set `maxItems` and `maximum` on tool schemas |
 
 Skills, presentation extensions, and delegates are prompt bytes too. Gate lexicons, guardrail limits, memory settings,

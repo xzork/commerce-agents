@@ -178,6 +178,29 @@ class FulfillmentOption(BaseModel):
     location: str | None = None
 
 
+class AccountStatus(BaseModel):
+    """One account's standing as the store's accounting system reports it: what is owed
+    and on what terms. Dates are the system's own (ISO) values; nothing here is computed
+    by the agent. A customer may hold several accounts, each its own record."""
+
+    account_name: str
+    balance: float
+    balance_due_date: str | None = None
+    term_days: int | None = None
+    due_date: str | None = None
+    currency: str = "USD"
+
+
+class CustomerSummary(BaseModel):
+    """One customer a staff user may act for, as ``find_customers`` lists them: enough
+    to tell two similar names apart, never a full identifier."""
+
+    customer_id: str
+    name: str
+    tax_number_masked: str | None = None
+    city: str | None = None
+
+
 class PageContext(BaseModel):
     page_type: Literal["home", "search", "product", "cart", "orders", "other"] = "home"
     product_id: str | None = None
@@ -193,10 +216,25 @@ class ShoppingSessionContext(ClockContext):
 
 class ShoppingSessionState(BaseModel):
     """Held by the host for the session. ``seen_products`` is the provenance record: cart
-    writes accept only ids in it, and presentation payloads are enriched from it."""
+    writes accept only ids in it, and presentation payloads are enriched from it.
+    ``seen_customers`` is the same record for ``select_customer``, and
+    ``acting_customer_id`` the customer a staff user last selected."""
 
     seen_products: dict[str, Product] = Field(default_factory=dict)
+    seen_customers: dict[str, CustomerSummary] = Field(default_factory=dict)
+    acting_customer_id: str | None = None
 
     def remember_products(self, products: list[Product]) -> None:
         for product in products:
             remember(self.seen_products, product.product_id, product)
+
+    def remember_customers(self, customers: list[CustomerSummary]) -> None:
+        for customer in customers:
+            remember(self.seen_customers, customer.customer_id, customer)
+
+    @property
+    def acting_customer(self) -> CustomerSummary | None:
+        """The selected customer's record, or None before a selection."""
+        if self.acting_customer_id is None:
+            return None
+        return self.seen_customers.get(self.acting_customer_id)

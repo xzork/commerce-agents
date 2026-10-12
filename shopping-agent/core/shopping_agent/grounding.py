@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """The shopping agent's grounding rules, in precedence order: a store-terms question
-starts from search_policies, a post-purchase question from get_orders, and a mention of
-an unseen product id from get_product_details. A rule whose system the config switches
-off never fires."""
+starts from search_policies, a post-purchase question from get_orders, a question about
+what the customer owes from get_account_status, and a mention of an unseen product id
+from get_product_details. A rule whose system the config switches off never fires, and
+the account rule waits for a selected customer when a staff user acts for one."""
 
 from __future__ import annotations
 
@@ -38,6 +39,18 @@ def _orders(
     return {} if fires else None
 
 
+def _account(
+    config: ShoppingAgentConfig, text: str, state: ShoppingSessionState
+) -> dict[str, Any] | None:
+    fires = (
+        config.enable_account_status
+        and config.account_grounding_gate
+        and not (config.enable_acting_customer and state.acting_customer_id is None)
+        and matches_terms_and_cues(text, config.account_intent_terms, config.account_intent_cues)
+    )
+    return {} if fires else None
+
+
 def _catalog(
     config: ShoppingAgentConfig, text: str, state: ShoppingSessionState
 ) -> dict[str, Any] | None:
@@ -59,6 +72,15 @@ GROUNDING_RULES: tuple[GroundingRule, ...] = (
         prefetch_intro=lambda _: (
             "Recent orders for this turn, fetched by the host (the same data a get_orders "
             "call returns):"
+        ),
+    ),
+    GroundingRule(
+        "account",
+        "get_account_status",
+        _account,
+        prefetch_intro=lambda _: (
+            "Account status for this turn, fetched by the host (the same data a "
+            "get_account_status call returns):"
         ),
     ),
     GroundingRule(
